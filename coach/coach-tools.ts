@@ -8,11 +8,11 @@ function text(s: string) {
 
 const getTrackingSummary = tool(
   'get_tracking_summary',
-  'Read the daily tracking database: habit definitions, per-day habit completion, and morning weigh-ins for the trailing N days. Use this at the start of a conversation to ground advice in what Nick actually did.',
+  'Read the daily tracking database: habit definitions, per-day habit completion, morning weigh-ins, and logged sins (negative events: alcohol, late eating, late caffeine) for the trailing N days. Use this at the start of a conversation to ground advice in what Nick actually did.',
   { days: z.number().int().min(1).max(365).describe('How many trailing days to fetch') },
   async ({ days }) => {
     const db = trackingDb()
-    const [habits, logs, weights] = await Promise.all([
+    const [habits, logs, weights, sins, nextDexa] = await Promise.all([
       db.execute('SELECT id, name, subtitle, active FROM habits ORDER BY sort'),
       db.execute({
         sql: `SELECT date, habit_id FROM habit_logs WHERE date >= date('now', 'localtime', ?) ORDER BY date DESC`,
@@ -22,6 +22,11 @@ const getTrackingSummary = tool(
         sql: `SELECT date, lbs FROM weights WHERE date >= date('now', 'localtime', ?) ORDER BY date DESC`,
         args: [`-${days} days`],
       }),
+      db.execute({
+        sql: `SELECT date, sin_id FROM sin_logs WHERE date >= date('now', 'localtime', ?) ORDER BY date DESC`,
+        args: [`-${days} days`],
+      }),
+      db.execute("SELECT value FROM settings WHERE key = 'next_dexa_date'"),
     ])
     const byDate = new Map<string, string[]>()
     for (const r of logs.rows) {
@@ -44,6 +49,11 @@ const getTrackingSummary = tool(
         ...(weights.rows.length
           ? weights.rows.map((w) => `${w.date}: ${w.lbs} lbs`)
           : ['(none logged)']),
+        '',
+        'SINS (negative events Nick logged - watch for patterns):',
+        ...(sins.rows.length ? sins.rows.map((s) => `${s.date}: ${s.sin_id}`) : ['(none logged)']),
+        '',
+        `NEXT DEXA SCAN: ${nextDexa.rows.length ? nextDexa.rows[0].value : '(not set)'}`,
       ].join('\n'),
     )
   },
@@ -55,7 +65,10 @@ const queryTrackingDb = tool(
 Schema:
   habits(id TEXT PK, emoji TEXT, name TEXT, subtitle TEXT, sort INT, active INT, created_at TEXT)
   habit_logs(date TEXT 'YYYY-MM-DD', habit_id TEXT, completed_at TEXT, PK(date, habit_id))
-  weights(date TEXT PK 'YYYY-MM-DD', lbs REAL, logged_at TEXT)`,
+  weights(date TEXT PK 'YYYY-MM-DD', lbs REAL, logged_at TEXT)
+  sins(id TEXT PK, emoji TEXT, name TEXT, sort INT, active INT, created_at TEXT) -- negative events, not goals
+  sin_logs(date TEXT 'YYYY-MM-DD', sin_id TEXT, logged_at TEXT, PK(date, sin_id))
+  settings(key TEXT PK, value TEXT) -- e.g. next_dexa_date`,
   { sql: z.string().describe('A single SELECT (or WITH ... SELECT) statement') },
   async ({ sql }) => {
     const trimmed = sql.trim().replace(/;\s*$/, '')

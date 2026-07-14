@@ -1,5 +1,6 @@
 import { Celebration } from '@/components/celebration'
 import { HabitCard } from '@/components/habit-card'
+import { SinsSection } from '@/components/sins-section'
 import { WeightCard } from '@/components/weight-card'
 import { addDays, dayKey, parseDayKey } from '@/lib/dates'
 import {
@@ -9,10 +10,11 @@ import {
   loadHistory,
   saveWeight,
   setHabitDone,
+  setSinLogged,
 } from '@/lib/tracking'
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { format } from 'date-fns'
-import { ChevronLeft, ChevronRight, Flame } from 'lucide-react'
+import { differenceInCalendarDays, format } from 'date-fns'
+import { ChevronLeft, ChevronRight, Flame, ScanLine } from 'lucide-react'
 import { useState } from 'react'
 
 // STREAK_WINDOW caps how far back the streak can count; a year is plenty.
@@ -30,6 +32,23 @@ export const Route = createFileRoute('/')({
   component: TodayPage,
 })
 
+function DexaBanner({ nextDexaDate }: { nextDexaDate: string }) {
+  const days = differenceInCalendarDays(parseDayKey(nextDexaDate), new Date())
+  if (days < 0) return null
+  return (
+    <div className="mb-3 flex items-center justify-center gap-2 rounded-xl border border-border bg-card/60 px-3 py-2 text-sm text-muted-foreground">
+      <ScanLine className="size-4 text-accent" />
+      <span>
+        Next DEXA scan{' '}
+        <span className="font-semibold text-foreground">
+          {format(parseDayKey(nextDexaDate), 'MMM d')}
+        </span>{' '}
+        · {days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}
+      </span>
+    </div>
+  )
+}
+
 function TodayPage() {
   const { date, day, history } = Route.useLoaderData()
   const router = useRouter()
@@ -39,7 +58,8 @@ function TodayPage() {
   const streak = currentStreak(history)
   const displayDay = dayNumber(history)
 
-  const totalCards = day.habits.length + 1 // +1 for the weigh-in card
+  // Sins never count toward completion - only habits and the weigh-in do.
+  const totalCards = day.habits.length + 1
   const completedCards = day.completed.size + (day.weightLbs !== null ? 1 : 0)
 
   const toggle = async (habitId: string, done: boolean) => {
@@ -57,9 +77,14 @@ function TodayPage() {
     if (!hadWeight && before === totalCards - 1) setCelebrating(true)
   }
 
+  const toggleSin = async (sinId: string, logged: boolean) => {
+    await setSinLogged(date, sinId, logged)
+    await router.invalidate()
+  }
+
   return (
     <main className="px-4 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[var(--bottom-nav-clearance)]">
-      <header className="mb-5 text-center">
+      <header className="mb-4 text-center">
         <div className="flex items-center justify-center gap-3">
           <button
             type="button"
@@ -95,7 +120,10 @@ function TodayPage() {
         )}
       </header>
 
+      {day.nextDexaDate && <DexaBanner nextDexaDate={day.nextDexaDate} />}
+
       <div className="grid grid-cols-2 gap-3">
+        <WeightCard weightLbs={day.weightLbs} onSave={logWeight} />
         {day.habits.map((h) => (
           <HabitCard
             key={h.id}
@@ -104,8 +132,9 @@ function TodayPage() {
             onToggle={(done) => toggle(h.id, done)}
           />
         ))}
-        <WeightCard weightLbs={day.weightLbs} onSave={logWeight} />
       </div>
+
+      <SinsSection sins={day.sins} logged={day.sinsLogged} onToggle={toggleSin} />
 
       <p className="mt-4 mb-2 text-center text-xs text-muted-foreground">
         press and hold a card to check it off

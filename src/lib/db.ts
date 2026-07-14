@@ -9,22 +9,30 @@ export const db = createClient({
   authToken: import.meta.env.VITE_TURSO_AUTH_TOKEN,
 })
 
-// The 12 daily habits from plan/plan.md section 6. Morning weigh-in is handled by
-// the dedicated weight card, not a habit row. Seeded with INSERT OR IGNORE so
-// renames/edits made later in the DB are never clobbered on startup.
+// The positive daily habits, ordered by importance to the goals (sleep and diet
+// are the two biggest levers for the cut + testosterone). Morning weigh-in is
+// handled by the dedicated weight card, not a habit row. Seeded with INSERT OR
+// IGNORE so edits made later in the DB survive restarts.
 const SEED_HABITS: Array<[id: string, emoji: string, name: string, subtitle: string]> = [
-  ['sleep', '😴', 'Sleep 7-9 hours', 'consistent bedtime, cool dark room'],
-  ['meditate', '🧘', 'Meditate', '10+ minutes, any style'],
+  ['sleep', '😴', 'Sleep 7-9 hours', 'cool, dark room'],
+  ['bedtime', '🛏️', 'Bed + wake on time', 'consistent sleep and wake times'],
+  ['diet', '🍽️', 'Followed diet', '2,250 kcal · 170 g protein'],
   ['exercise', '🏋️', 'Exercise', 'per plan - on rest days, check = full rest taken'],
   ['steps', '👟', '8,000+ steps', 'including rest days'],
-  ['protein', '🥩', 'Hit protein', '170 g or more'],
-  ['calories', '🔥', 'Within calories', 'about 2,250 kcal'],
-  ['supplements', '💊', 'Creatine + supplements', 'creatine, D3/K2, magnesium, zinc, fish oil'],
+  ['supplements', '💊', 'Supplements', 'creatine, D3/K2, magnesium, zinc, fish oil'],
+  ['meditate', '🧘', 'Meditate', '10+ minutes, any style'],
   ['sunlight', '☀️', 'Morning sunlight', '10 min within an hour of waking'],
-  ['caffeine', '☕', 'No caffeine after noon', 'protects sleep quality'],
-  ['alcohol', '🚫', 'No alcohol', 'default zero'],
-  ['kitchen', '🌙', 'Kitchen closed', 'no food 2-3 hours before bed'],
 ]
+
+// Negative events logged after the fact, not goals to check off. Sins never
+// count toward day completion or streaks - they are data for the coach.
+const SEED_SINS: Array<[id: string, emoji: string, name: string]> = [
+  ['alcohol', '🍺', 'Drank alcohol'],
+  ['ate-late', '🌙', 'Ate late'],
+  ['late-caffeine', '☕', 'Caffeine after noon'],
+]
+
+const SEED_SETTINGS: Array<[key: string, value: string]> = [['next_dexa_date', '2026-10-14']]
 
 let schemaReady: Promise<void> | null = null
 
@@ -58,12 +66,46 @@ export function ensureSchema(): Promise<void> {
             logged_at TEXT NOT NULL DEFAULT (datetime('now'))
           )`,
         ),
+        db.execute(
+          `CREATE TABLE IF NOT EXISTS sins (
+            id TEXT PRIMARY KEY,
+            emoji TEXT NOT NULL,
+            name TEXT NOT NULL,
+            sort INTEGER NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          )`,
+        ),
+        db.execute(
+          `CREATE TABLE IF NOT EXISTS sin_logs (
+            date TEXT NOT NULL,
+            sin_id TEXT NOT NULL,
+            logged_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (date, sin_id)
+          )`,
+        ),
+        db.execute(
+          `CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+          )`,
+        ),
       ])
       await db.batch(
-        SEED_HABITS.map(([id, emoji, name, subtitle], i) => ({
-          sql: 'INSERT OR IGNORE INTO habits (id, emoji, name, subtitle, sort) VALUES (?, ?, ?, ?, ?)',
-          args: [id, emoji, name, subtitle, i],
-        })),
+        [
+          ...SEED_HABITS.map(([id, emoji, name, subtitle], i) => ({
+            sql: 'INSERT OR IGNORE INTO habits (id, emoji, name, subtitle, sort) VALUES (?, ?, ?, ?, ?)',
+            args: [id, emoji, name, subtitle, i] as (string | number)[],
+          })),
+          ...SEED_SINS.map(([id, emoji, name], i) => ({
+            sql: 'INSERT OR IGNORE INTO sins (id, emoji, name, sort) VALUES (?, ?, ?, ?)',
+            args: [id, emoji, name, i] as (string | number)[],
+          })),
+          ...SEED_SETTINGS.map(([key, value]) => ({
+            sql: 'INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)',
+            args: [key, value] as (string | number)[],
+          })),
+        ],
         'write',
       )
     })()

@@ -52,8 +52,11 @@ CLI (see `.env.example`). The same values are GitHub Actions secrets for the Pag
   (`env(safe-area-inset-top)` padding on each page header, `--bottom-nav-clearance` for the
   fixed nav + home indicator, `overscroll-behavior-y: none`). Keep new pages consistent.
 - Habit completion is stored as row-presence in `habit_logs` (delete = uncheck), not a boolean
-  column. The streak definition lives in `src/lib/tracking.ts` (`currentStreak`): today only
-  counts once fully complete, and "fully complete" includes every active habit but NOT the
-  weigh-in card.
+  column; sins work the same way in `sin_logs`. The streak definition lives in
+  `src/lib/tracking.ts` (`currentStreak`): today only counts once fully complete, and "fully
+  complete" means every active habit plus the weigh-in card. Sins are negative events, never
+  part of completion or streaks.
+- `settings.next_dexa_date` drives the DEXA countdown banner on Today; update it after each
+  scan (the coach can read it but not write it).
 - The seed habits in `src/lib/db.ts` use `INSERT OR IGNORE` - edits made to habit rows in the
   DB survive restarts; changing the seed array does not update existing rows.

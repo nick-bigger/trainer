@@ -150,7 +150,7 @@ body {
 .habit-card .hold-fill {
   position: absolute;
   inset: 0;
-  background: color-mix(in oklch, var(--accent) 22%, transparent);
+  background: color-mix(in oklch, var(--hold-color, var(--accent)) 22%, transparent);
   transform: scaleY(0);
   transform-origin: bottom;
   pointer-events: none;

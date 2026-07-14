@@ -78,6 +78,9 @@ function HistoryPage() {
                 <div className="text-xs text-muted-foreground">
                   {d.done}/{d.total} habits
                   {d.weightLbs !== null && ` · ${d.weightLbs} lbs`}
+                  {d.sins > 0 && (
+                    <span className="text-destructive">{` · ${d.sins} sin${d.sins === 1 ? '' : 's'}`}</span>
+                  )}
                 </div>
               </div>
               {d.complete ? (
