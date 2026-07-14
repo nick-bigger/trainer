@@ -34,6 +34,12 @@ const SEED_SINS: Array<[id: string, emoji: string, name: string]> = [
 
 const SEED_SETTINGS: Array<[key: string, value: string]> = [['next_dexa_date', '2026-10-14']]
 
+// Habit ids that older deployed bundles seeded and may re-insert (a stale
+// client's INSERT OR IGNORE resurrects them after a DB reset). Deleted on every
+// startup so the current seed list always wins. Add to this when a habit is
+// removed or renamed to a new id.
+const RETIRED_HABIT_IDS = ['protein', 'calories', 'caffeine', 'alcohol', 'kitchen']
+
 let schemaReady: Promise<void> | null = null
 
 export function ensureSchema(): Promise<void> {
@@ -91,8 +97,14 @@ export function ensureSchema(): Promise<void> {
           )`,
         ),
       ])
+      const retiredIn = RETIRED_HABIT_IDS.map(() => '?').join(', ')
       await db.batch(
         [
+          { sql: `DELETE FROM habits WHERE id IN (${retiredIn})`, args: RETIRED_HABIT_IDS },
+          {
+            sql: `DELETE FROM habit_logs WHERE habit_id IN (${retiredIn})`,
+            args: RETIRED_HABIT_IDS,
+          },
           ...SEED_HABITS.map(([id, emoji, name, subtitle], i) => ({
             sql: 'INSERT OR IGNORE INTO habits (id, emoji, name, subtitle, sort) VALUES (?, ?, ?, ?, ?)',
             args: [id, emoji, name, subtitle, i] as (string | number)[],
