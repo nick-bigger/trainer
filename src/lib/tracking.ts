@@ -95,6 +95,9 @@ export type DaySummary = {
   date: string
   done: number
   total: number
+  // All active habits checked, regardless of the weigh-in - what the streak counts.
+  habitsComplete: boolean
+  // habitsComplete AND the morning weigh-in logged - a "perfect day".
   complete: boolean
   weightLbs: number | null
   sins: number
@@ -125,13 +128,13 @@ export async function loadHistory(days: number): Promise<DaySummary[]> {
   for (let d = dayKey(), i = 0; i < days; d = addDays(d, -1), i++) {
     const done = doneByDate.get(d) ?? 0
     const weightLbs = weightByDate.get(d) ?? null
+    const habitsComplete = total > 0 && done >= total
     out.push({
       date: d,
       done,
       total,
-      // A complete day = every active habit checked AND the morning weigh-in
-      // logged - the same bar the Today page's celebration uses.
-      complete: total > 0 && done >= total && weightLbs !== null,
+      habitsComplete,
+      complete: habitsComplete && weightLbs !== null,
       weightLbs,
       sins: sinsByDate.get(d) ?? 0,
     })
@@ -140,13 +143,15 @@ export async function loadHistory(days: number): Promise<DaySummary[]> {
 }
 
 /**
- * Current streak of fully-complete days. Today only counts once complete, so an
- * in-progress morning doesn't read as a broken streak.
+ * Current streak of days with every active habit checked. Missing the weigh-in
+ * doesn't break it - that's tracked separately as "perfect days". Today only
+ * counts once its habits are complete, so an in-progress morning doesn't read
+ * as a broken streak.
  */
 export function currentStreak(history: DaySummary[]): number {
   let streak = 0
   for (let i = 0; i < history.length; i++) {
-    if (history[i].complete) streak++
+    if (history[i].habitsComplete) streak++
     else if (i === 0)
       continue // today, still in progress
     else break
@@ -157,5 +162,5 @@ export function currentStreak(history: DaySummary[]): number {
 /** The challenge-day number shown in the header: streak so far, counting today. */
 export function dayNumber(history: DaySummary[]): number {
   const streak = currentStreak(history)
-  return history.length > 0 && history[0].complete ? streak : streak + 1
+  return history.length > 0 && history[0].habitsComplete ? streak : streak + 1
 }
